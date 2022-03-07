@@ -1,0 +1,60 @@
+version: 2.1
+orbs:
+  node: circleci/node@4.7
+
+definition:
+  fast-checkout: &fast-checkout
+    attach_workspace:
+      at: .
+
+jobs:
+  create-workspace:
+    executor: node/default
+    steps:
+      - checkout
+      - persist_to_workspace:
+          root: .
+          paths:
+            - .
+  test:
+    executor:
+      name: node/default
+      tag: "14.17.5"
+    steps:
+      - *fast-checkout
+      - node/install-packages
+      - run:
+          command: npm run test
+      - store_artifacts:
+          path: coverage
+  publish-package:
+    executor:
+      name: node/default
+      tag: "14.17.5"
+    steps:
+      - *fast-checkout
+      - run:
+          name: Authenticate with registry
+          command: echo "//registry.npmjs.org/:_authToken=$npm_TOKEN" > .npmrc
+      - run:
+          name: Check logged in user
+          command: npm whoami
+      - run:
+          name: Publish package
+          command: npm publish --access public
+workflows:
+  build_test_publish:
+    jobs:
+      - create-workspace
+      - test:
+          requires:
+            - create-workspace
+      - approve_to_publish:
+          name: approve-package-publish
+          type: approval
+          requires:
+            - test
+      - publish-package:
+          name: publish-to-npm
+          requires:
+            - approve-package-publish
